@@ -1,12 +1,24 @@
 "use client"
 
 import Link from "next/link"
+import { usePathname, useRouter } from "next/navigation"
 import { useState, useSyncExternalStore, type FormEvent } from "react"
-import { ArrowRight, CalendarDays, Info, MapPin, MessageSquare } from "lucide-react"
-import { Toaster, toast } from "sonner"
+import {
+  ArrowRight,
+  CalendarDays,
+  Info,
+  Loader2,
+  MapPin,
+  MessageSquare,
+} from "lucide-react"
+import { toast } from "sonner"
 
+import { authClient } from "@/lib/auth-client"
+import { apiFetch, readApiMessage } from "@/lib/client-api"
 import { formatServicePrice } from "@/lib/format"
+import { dashboardPathForRole } from "@/lib/safe-redirect"
 import { cn } from "@/lib/utils"
+import { normalizeUserRole } from "@/types/auth"
 import type { ServiceListing } from "@/types/service"
 
 interface BookingPanelProps {
@@ -73,6 +85,10 @@ function validateBooking(values: BookingValues, minimumDate: string): BookingErr
 }
 
 export function BookingPanel({ service }: BookingPanelProps) {
+  const pathname = usePathname()
+  const router = useRouter()
+  const { data: session, isPending: isSessionPending } = authClient.useSession()
+  const sessionRole = session?.user ? normalizeUserRole(session.user.role) : null
   const listedLocation = [service.location.city, service.location.country]
     .filter((part) => part.trim().length > 0)
     .join(", ")
@@ -84,6 +100,7 @@ export function BookingPanel({ service }: BookingPanelProps) {
   })
   const [errors, setErrors] = useState<BookingErrors>({})
   const [notice, setNotice] = useState<string | null>(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   function updateField(field: BookingField, value: string) {
     setValues((current) => ({ ...current, [field]: value }))
@@ -96,8 +113,9 @@ export function BookingPanel({ service }: BookingPanelProps) {
     setErrors((current) => ({ ...current, [field]: nextErrors[field] }))
   }
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (isSubmitting) return
 
     const nextErrors = validateBooking(values, minimumDate)
     setErrors(nextErrors)
@@ -107,14 +125,78 @@ export function BookingPanel({ service }: BookingPanelProps) {
       return
     }
 
-    // The current backend has no authentication session or booking endpoint.
-    // We deliberately do not fabricate a successful request or write a record.
-    const message =
-      "Online booking is not available yet. Sign in will be required once booking requests open."
-    setNotice(message)
-    toast.info("Booking requests are not available yet", {
-      description: "No booking was created. Please check back soon.",
-    })
+    if (isSessionPending) {
+      toast.info("Checking your session", {
+        description: "Please try again in a moment.",
+      })
+      return
+    }
+
+    if (!session?.user) {
+      const returnTo = `${pathname}#booking`
+      toast.info("Please sign in to continue", {
+        description: "Your booking details stay on this page and we will bring you right back.",
+      })
+      router.push(`/sign-in?next=${encodeURIComponent(returnTo)}`)
+      return
+    }
+
+    if (sessionRole !== "customer") {
+      const message =
+        "Only customer accounts can send booking requests. Vendors manage their own services and admins have a separate dashboard."
+      setNotice(message)
+      toast.info("Customer account required", { description: message })
+      return
+    }
+
+    setIsSubmitting(true)
+    setNotice(null)
+
+    try {
+      const response = await apiFetch("/bookings", {
+        method: "POST",
+        body: JSON.stringify({
+          serviceId: service.id,
+          eventDate: values.eventDate,
+          eventLocation: values.eventLocation.trim(),
+          message: values.message.trim(),
+        }),
+      })
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          const returnTo = `${pathname}#booking`
+          toast.info("Please sign in again", {
+            description: "Your session expired. Sign in and your details stay on this page.",
+          })
+          router.push(`/sign-in?next=${encodeURIComponent(returnTo)}`)
+          return
+        }
+
+        const message = await readApiMessage(
+          response,
+          "Your booking request could not be sent. Please try again.",
+        )
+        setNotice(message)
+        toast.error("Booking request not sent", { description: message })
+        return
+      }
+
+      setNotice(
+        `Your request was sent to ${service.vendor.name}. You can track and cancel it from your customer dashboard.`,
+      )
+      toast.success("Booking request sent", {
+        description: `${service.vendor.name} will review your request. No payment was taken.`,
+      })
+      setValues((current) => ({ ...current, message: "" }))
+      router.refresh()
+    } catch {
+      const message = "Something went wrong while sending your request. Please try again."
+      setNotice(message)
+      toast.error("Booking request not sent", { description: message })
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   return (
@@ -123,8 +205,6 @@ export function BookingPanel({ service }: BookingPanelProps) {
       aria-labelledby="booking-title"
       className="scroll-mt-24 rounded-[1.75rem] border border-wine-100 bg-white p-5 shadow-[0_28px_70px_-55px_rgba(80,16,38,0.6)] sm:p-6"
     >
-      <Toaster position="top-center" richColors closeButton />
-
       <div className="flex items-start justify-between gap-4 border-b border-wine-100 pb-5">
         <div className="min-w-0">
           <p className="text-[0.65rem] font-bold uppercase tracking-[0.2em] text-wine-500">
@@ -230,10 +310,20 @@ export function BookingPanel({ service }: BookingPanelProps) {
 
         <button
           type="submit"
-          className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-full bg-wine-800 px-5 text-sm font-semibold text-cream-50 transition-colors hover:bg-wine-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-wine-300"
+          disabled={isSubmitting}
+          className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-full bg-wine-800 px-5 text-sm font-semibold text-cream-50 transition-colors hover:bg-wine-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-wine-300 disabled:cursor-not-allowed disabled:opacity-70"
         >
-          Send Booking Request
-          <ArrowRight aria-hidden="true" className="size-4" />
+          {isSubmitting ? (
+            <>
+              <Loader2 aria-hidden="true" className="size-4 animate-spin" />
+              Sending request…
+            </>
+          ) : (
+            <>
+              Send Booking Request
+              <ArrowRight aria-hidden="true" className="size-4" />
+            </>
+          )}
         </button>
 
         {notice ? (
@@ -248,16 +338,37 @@ export function BookingPanel({ service }: BookingPanelProps) {
       </form>
 
       <div className="mt-4 rounded-xl border border-wine-100 bg-wine-50/60 px-3.5 py-3 text-xs leading-relaxed text-foreground/75">
-        <p>
-          <span className="font-semibold text-wine-900">Sign in required.</span> Customer booking
-          requests need a signed-in account, and the booking service is not enabled in this build.
-        </p>
-        <Link
-          href={`/sign-in?next=${encodeURIComponent(`/services/${service.id}`)}`}
-          className="mt-2 inline-flex rounded font-semibold text-wine-800 underline decoration-wine-300 underline-offset-4 hover:text-wine-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-wine-300"
-        >
-          Go to Sign In
-        </Link>
+        {session?.user ? (
+          <>
+            <p>
+              <span className="font-semibold text-wine-900">
+                Signed in as {session.user.name}.
+              </span>{" "}
+              {sessionRole === "customer"
+                ? "Every request is attached to your account so you can track or cancel it later."
+                : "Only customer accounts can send booking requests. You are signed in as a vendor or admin."}
+            </p>
+            <Link
+              href={dashboardPathForRole(sessionRole ?? "customer")}
+              className="mt-2 inline-flex rounded font-semibold text-wine-800 underline decoration-wine-300 underline-offset-4 hover:text-wine-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-wine-300"
+            >
+              {sessionRole === "customer" ? "View my booking requests" : "Go to my dashboard"}
+            </Link>
+          </>
+        ) : (
+          <>
+            <p>
+              <span className="font-semibold text-wine-900">Sign in required.</span> Customer
+              booking requests need a signed-in customer account so vendors can reply to you.
+            </p>
+            <Link
+              href={`/sign-in?next=${encodeURIComponent(`${pathname}#booking`)}`}
+              className="mt-2 inline-flex rounded font-semibold text-wine-800 underline decoration-wine-300 underline-offset-4 hover:text-wine-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-wine-300"
+            >
+              Go to Sign In
+            </Link>
+          </>
+        )}
       </div>
 
       <p className="mt-3 text-center text-[0.68rem] text-muted-foreground">
