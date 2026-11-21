@@ -91,6 +91,7 @@ export function parseVendorService(value: unknown): VendorService | null {
     images: value.images.filter((image): image is string => typeof image === "string"),
     status,
     isActive: value.isActive === true,
+    rejectionReason: text(value.rejectionReason),
     createdAt: text(value.createdAt),
     updatedAt: text(value.updatedAt),
   }

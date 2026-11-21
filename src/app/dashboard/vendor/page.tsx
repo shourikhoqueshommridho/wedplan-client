@@ -1,19 +1,15 @@
 import type { Metadata } from "next"
-import Link from "next/link"
-import { UserRound } from "lucide-react"
 
-import { AccountShell } from "@/components/account/account-shell"
-import { RoleBadge } from "@/components/account/role-badge"
-import { VendorWorkspace } from "@/components/vendor/vendor-workspace"
-import { buttonVariants } from "@/components/ui/button"
-import {
-  parseBooking,
-  parseList,
-  parseVendorProfileResponse,
-  parseVendorService,
-} from "@/lib/account-data"
+import { VendorBanner } from "@/components/vendor/dashboard/vendor-banner"
+import { VendorShell } from "@/components/vendor/dashboard/vendor-shell"
+import { VendorStatCards } from "@/components/vendor/dashboard/vendor-stat-cards"
+import { ServicesPreview } from "@/components/vendor/dashboard/services-preview"
+import { RecentBookings } from "@/components/vendor/dashboard/recent-bookings"
+import { EarningsOverview } from "@/components/vendor/dashboard/earnings-overview"
+import { PremiumUpgradeBanner } from "@/components/vendor/dashboard/premium-upgrade-banner"
+import { buildVendorStats } from "@/lib/vendor-dashboard"
+import { parseBooking, parseList, parseVendorService } from "@/lib/account-data"
 import { fetchWithSession, requireServerRole } from "@/lib/auth-server"
-import { cn } from "@/lib/utils"
 
 export const metadata: Metadata = {
   title: "Vendor Dashboard",
@@ -31,50 +27,55 @@ export default async function VendorDashboardPage() {
     fetchWithSession("/api/bookings"),
   ])
 
-  const profile =
-    profileResponse?.ok ? parseVendorProfileResponse(await profileResponse.json()) : null
-  const services =
-    servicesResponse?.ok
-      ? parseList(
-          await servicesResponse.json(),
-          "services",
-          parseVendorService,
-        )
-      : []
-  const bookings =
-    bookingsResponse?.ok
-      ? parseList(await bookingsResponse.json(), "bookings", parseBooking)
-      : []
+  // The profile is managed on the settings page. Its response is still checked
+  // here so a failing protected endpoint is surfaced as a dashboard data error.
+  const services = servicesResponse?.ok
+    ? parseList(await servicesResponse.json(), "services", parseVendorService)
+    : []
+  const bookings = bookingsResponse?.ok
+    ? parseList(await bookingsResponse.json(), "bookings", parseBooking)
+    : []
 
   const dataError = !profileResponse?.ok || !servicesResponse?.ok || !bookingsResponse?.ok
+  const stats = buildVendorStats(services, bookings)
 
   return (
-    <AccountShell
-      eyebrow="Vendor dashboard"
-      title="Vendor workspace"
-      description="Manage your business profile, submit services for review and respond to customer booking requests."
-      badge={<RoleBadge role="vendor" />}
-      actions={
-        <Link
-          href="/profile"
-          className={cn(
-            buttonVariants({ variant: "outline" }),
-            "h-10 rounded-full border-wine-200 bg-white px-5 text-wine-800 hover:bg-wine-50",
-          )}
-        >
-          <UserRound aria-hidden="true" className="size-4" />
-          Account profile
-        </Link>
-      }
+    <VendorShell
+      user={{
+        name: session.user.name,
+        email: session.user.email,
+        image: session.user.image ?? null,
+        role: session.user.role,
+      }}
+      pendingBookings={stats.pendingBookings}
     >
-      <VendorWorkspace
-        vendorName={session.user.name}
-        vendorEmail={session.user.email}
-        initialProfile={profile}
-        initialServices={services}
-        initialBookings={bookings}
-        dataError={dataError}
-      />
-    </AccountShell>
+      <div className="space-y-5">
+        {dataError ? (
+          <div
+            role="alert"
+            className="rounded-2xl border border-destructive/20 bg-destructive/5 px-5 py-4 text-sm text-destructive"
+          >
+            <p className="font-semibold">Some vendor data could not be loaded.</p>
+            <p className="mt-1 text-xs leading-relaxed">
+              The protected API rejected part of this request. Refresh the page or sign in again.
+            </p>
+          </div>
+        ) : null}
+
+        <VendorBanner name={session.user.name} />
+
+        <VendorStatCards stats={stats} />
+
+        <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1.18fr_1fr]">
+          <ServicesPreview services={services} dataError={dataError} />
+          <RecentBookings bookings={bookings} dataError={dataError} />
+        </div>
+
+        <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1.18fr_1fr]">
+          <EarningsOverview bookings={bookings} now={new Date().toISOString()} />
+          <PremiumUpgradeBanner />
+        </div>
+      </div>
+    </VendorShell>
   )
 }

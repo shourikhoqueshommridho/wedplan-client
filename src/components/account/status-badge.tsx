@@ -20,7 +20,13 @@ const statusLabels: Record<string, string> = {
   inactive: "Inactive",
 }
 
-export function StatusBadge({ status }: { status: string }) {
+interface StatusBadgeProps {
+  status: string
+  /** Optional display override (e.g. "Active" for an approved service). */
+  label?: string
+}
+
+export function StatusBadge({ status, label }: StatusBadgeProps) {
   const normalized = status.trim().toLowerCase()
 
   return (
@@ -29,7 +35,7 @@ export function StatusBadge({ status }: { status: string }) {
         statusStyles[normalized] ?? statusStyles.pending
       }`}
     >
-      {statusLabels[normalized] ?? status}
+      {label ?? statusLabels[normalized] ?? status}
     </span>
   )
 }

@@ -1,20 +1,16 @@
 import type { Metadata } from "next"
-import Link from "next/link"
-import { LayoutDashboard, Search } from "lucide-react"
 
-import { AccountShell } from "@/components/account/account-shell"
-import { RoleBadge } from "@/components/account/role-badge"
-import { AdminWorkspace } from "@/components/admin/admin-workspace"
-import { buttonVariants } from "@/components/ui/button"
+import { AdminBanner } from "@/components/admin/admin-banner"
+import { AdminOverviewPanels } from "@/components/admin/admin-overview-panels"
+import { AdminStatCards } from "@/components/admin/admin-stat-cards"
+import { buildAdminStats } from "@/lib/admin-dashboard"
 import {
-  parseAdminService,
-  parseAdminUser,
-  parseBooking,
-  parseList,
-  parseVendorProfile,
-} from "@/lib/account-data"
-import { fetchWithSession, requireServerRole } from "@/lib/auth-server"
-import { cn } from "@/lib/utils"
+  loadAdminBookings,
+  loadAdminServices,
+  loadAdminUsers,
+  loadAdminVendors,
+} from "@/lib/admin-server"
+import { requireServerRole } from "@/lib/auth-server"
 
 export const metadata: Metadata = {
   title: "Admin Dashboard",
@@ -26,70 +22,42 @@ export const instant = false
 export default async function AdminDashboardPage() {
   await requireServerRole("admin", "/dashboard/admin")
 
-  const [usersResponse, vendorsResponse, servicesResponse, bookingsResponse] = await Promise.all([
-    fetchWithSession("/api/account/admin/users"),
-    fetchWithSession("/api/admin/vendors"),
-    fetchWithSession("/api/admin/services"),
-    fetchWithSession("/api/admin/bookings"),
+  const [usersResult, vendorsResult, servicesResult, bookingsResult] = await Promise.all([
+    loadAdminUsers(),
+    loadAdminVendors(),
+    loadAdminServices(),
+    loadAdminBookings(),
   ])
 
-  const users = usersResponse?.ok
-    ? parseList(await usersResponse.json(), "users", parseAdminUser)
-    : []
-  const vendors = vendorsResponse?.ok
-    ? parseList(await vendorsResponse.json(), "vendors", parseVendorProfile)
-    : []
-  const services = servicesResponse?.ok
-    ? parseList(await servicesResponse.json(), "services", parseAdminService)
-    : []
-  const bookings = bookingsResponse?.ok
-    ? parseList(await bookingsResponse.json(), "bookings", parseBooking)
-    : []
-
   const dataError =
-    !usersResponse?.ok ||
-    !vendorsResponse?.ok ||
-    !servicesResponse?.ok ||
-    !bookingsResponse?.ok
+    !usersResult.ok || !vendorsResult.ok || !servicesResult.ok || !bookingsResult.ok
+
+  const stats = buildAdminStats(usersResult.items, servicesResult.items, bookingsResult.items)
 
   return (
-    <AccountShell
-      eyebrow="Admin dashboard"
-      title="Platform administration"
-      description="Review accounts, vendor businesses, service listings and booking activity across WedPlan."
-      badge={<RoleBadge role="admin" />}
-      actions={
-        <>
-          <Link
-            href="/services"
-            className={cn(
-              buttonVariants({ variant: "outline" }),
-              "h-10 rounded-full border-wine-200 bg-white px-5 text-wine-800 hover:bg-wine-50",
-            )}
-          >
-            <Search aria-hidden="true" className="size-4" />
-            Public site
-          </Link>
-          <Link
-            href="/profile"
-            className={cn(
-              buttonVariants({ variant: "default" }),
-              "h-10 rounded-full bg-wine-800 px-5 text-cream-50 hover:bg-wine-900",
-            )}
-          >
-            <LayoutDashboard aria-hidden="true" className="size-4" />
-            Profile
-          </Link>
-        </>
-      }
-    >
-      <AdminWorkspace
-        users={users}
-        vendors={vendors}
-        initialServices={services}
-        initialBookings={bookings}
+    <div className="space-y-5">
+      {dataError ? (
+        <div
+          role="alert"
+          className="rounded-2xl border border-destructive/20 bg-destructive/5 px-5 py-4 text-sm text-destructive"
+        >
+          <p className="font-semibold">Some admin data could not be loaded.</p>
+          <p className="mt-1 text-xs leading-relaxed">
+            One or more protected APIs rejected the request. Refresh the page or sign in again.
+          </p>
+        </div>
+      ) : null}
+
+      <AdminBanner />
+      <AdminStatCards stats={stats} />
+
+      <AdminOverviewPanels
+        users={usersResult.items}
+        services={servicesResult.items}
+        bookings={bookingsResult.items}
+        now={new Date().toISOString()}
         dataError={dataError}
       />
-    </AccountShell>
+    </div>
   )
 }

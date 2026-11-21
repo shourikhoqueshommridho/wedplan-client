@@ -112,6 +112,8 @@ export function Navbar() {
   const isHomeActive = pathname === "/"
   const isServicesActive = pathname === "/services" || pathname.startsWith("/services/")
   const isVendorsActive = pathname.startsWith("/vendor")
+  const isSignInPage = pathname === "/sign-in"
+  const isSignUpPage = pathname === "/sign-up"
   const closeMenu = () => setIsMenuOpen(false)
 
   return (
@@ -291,12 +293,28 @@ export function Navbar() {
             </div>
           ) : (
             <div className="hidden items-center gap-2 lg:flex">
-              <Link
-                href="/sign-in"
-                className="rounded-full px-4 py-2 text-sm font-semibold text-wine-800 transition-colors hover:bg-wine-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-wine-200"
-              >
-                Sign In
-              </Link>
+              {isSignInPage ? (
+                <Link
+                  href="/sign-up"
+                  className="rounded-full px-4 py-2 text-sm font-semibold text-wine-800 transition-colors hover:bg-wine-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-wine-200"
+                >
+                  Sign Up
+                </Link>
+              ) : isSignUpPage ? (
+                <Link
+                  href="/sign-in"
+                  className="rounded-full px-4 py-2 text-sm font-semibold text-wine-800 transition-colors hover:bg-wine-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-wine-200"
+                >
+                  Sign In
+                </Link>
+              ) : (
+                <Link
+                  href="/sign-in"
+                  className="rounded-full px-4 py-2 text-sm font-semibold text-wine-800 transition-colors hover:bg-wine-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-wine-200"
+                >
+                  Sign In
+                </Link>
+              )}
               <Link
                 href="/sign-up"
                 className={cn(
@@ -465,14 +483,14 @@ export function Navbar() {
             ) : (
               <div className="mt-4 grid grid-cols-2 gap-2 border-t border-wine-100 pt-4">
                 <Link
-                  href="/sign-in"
+                  href={isSignInPage ? "/sign-up" : "/sign-in"}
                   onClick={closeMenu}
                   className={cn(
                     buttonVariants({ variant: "outline" }),
                     "h-10 rounded-full border-wine-200 text-wine-800 hover:bg-wine-50",
                   )}
                 >
-                  Sign In
+                  {isSignInPage ? "Sign Up" : "Sign In"}
                 </Link>
                 <Link
                   href="/sign-up"

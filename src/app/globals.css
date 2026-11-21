@@ -21,6 +21,11 @@
   --color-gold-300: #f0d49b;
   --color-gold-400: #e6bf72;
   --color-gold-500: #d4a24a;
+  /* Customer dashboard reference palette */
+  --color-burgundy-600: #861638;
+  --color-burgundy-700: #70132f;
+  --color-blush-50: #fff8fa;
+  --color-blush-100: #f8d7e1;
 }
 
 @theme inline {

@@ -12,10 +12,24 @@ const roleLabels: Record<UserRole, string> = {
   admin: "Admin",
 }
 
-export function RoleBadge({ role }: { role: UserRole }) {
+const onDarkStyles: Record<UserRole, string> = {
+  customer: "bg-white/10 text-blush-100 border-white/25",
+  vendor: "bg-gold-300/20 text-gold-300 border-gold-300/40",
+  admin: "bg-white text-burgundy-700 border-white",
+}
+
+interface RoleBadgeProps {
+  role: UserRole
+  /** `onDark` keeps the badge legible on the burgundy dashboard sidebar. */
+  tone?: "default" | "onDark"
+}
+
+export function RoleBadge({ role, tone = "default" }: RoleBadgeProps) {
+  const palette = tone === "onDark" ? onDarkStyles : roleStyles
+
   return (
     <span
-      className={`inline-flex items-center rounded-full border px-3 py-1 text-[0.6rem] font-bold uppercase tracking-[0.16em] ${roleStyles[role]}`}
+      className={`inline-flex items-center rounded-full border px-3 py-1 text-[0.6rem] font-bold uppercase tracking-[0.16em] ${palette[role]}`}
     >
       {roleLabels[role]}
     </span>
