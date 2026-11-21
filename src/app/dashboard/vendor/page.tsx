@@ -1,4 +1,5 @@
 import type { Metadata } from "next"
+import { connection } from "next/server"
 
 import { VendorBanner } from "@/components/vendor/dashboard/vendor-banner"
 import { VendorShell } from "@/components/vendor/dashboard/vendor-shell"
@@ -19,6 +20,8 @@ export const metadata: Metadata = {
 export const instant = false
 
 export default async function VendorDashboardPage() {
+  // The earnings chart needs the current date; keep it out of the static shell.
+  await connection()
   const session = await requireServerRole("vendor", "/dashboard/vendor")
 
   const [profileResponse, servicesResponse, bookingsResponse] = await Promise.all([

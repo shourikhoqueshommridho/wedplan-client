@@ -1,4 +1,5 @@
 import type { Metadata } from "next"
+import { connection } from "next/server"
 
 import { BookingStatCards } from "@/components/customer/dashboard/booking-stat-cards"
 import { BookingsTable } from "@/components/customer/dashboard/bookings-table"
@@ -21,6 +22,8 @@ export const instant = false
 const RECENT_BOOKING_LIMIT = 5
 
 export default async function CustomerOverviewPage() {
+  // `findUpcomingBooking` depends on today's date; render it at request time.
+  await connection()
   const session = await requireServerRole("customer", "/dashboard/customer")
 
   const bookingsResponse = await fetchWithSession("/api/bookings")

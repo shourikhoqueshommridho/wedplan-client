@@ -1,4 +1,5 @@
 import type { Metadata } from "next"
+import { connection } from "next/server"
 
 import { AdminBanner } from "@/components/admin/admin-banner"
 import { AdminOverviewPanels } from "@/components/admin/admin-overview-panels"
@@ -20,6 +21,9 @@ export const metadata: Metadata = {
 export const instant = false
 
 export default async function AdminDashboardPage() {
+  // The analytics chart uses the current date. Opt into request-time rendering
+  // so PPR does not try to prerender an unstable `new Date()` value.
+  await connection()
   await requireServerRole("admin", "/dashboard/admin")
 
   const [usersResult, vendorsResult, servicesResult, bookingsResult] = await Promise.all([
