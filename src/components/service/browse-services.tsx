@@ -18,7 +18,7 @@ import { ServiceCard } from "@/components/service/service-card"
 import { ServiceCardsSkeleton } from "@/components/service/services-loading"
 import { serviceCategories } from "@/data/categories"
 import { weddingImages } from "@/data/images"
-import { apiUrl } from "@/lib/api"
+import { apiFetch } from "@/lib/client-api"
 import { isRecord, parseServiceListing, parseServiceLocations } from "@/lib/service-listing"
 import { cn } from "@/lib/utils"
 import { isServiceCategorySlug, type ServiceCategorySlug, type ServiceListing } from "@/types/service"
@@ -85,10 +85,9 @@ export function BrowseServices({ initialCategory, initialSearch }: BrowseService
       try {
         // Approval and activity visibility are enforced by the API against the
         // real MongoDB schema; the client never infers them from mock data.
-        const response = await fetch(apiUrl(`/api/services?${params.toString()}`), {
-          method: "GET",
-          headers: { Accept: "application/json" },
-          cache: "no-store",
+        // Same-origin proxy keeps public reads working without relying on a
+        // browser-reachable API origin, CORS, or a logged-in session.
+        const response = await apiFetch(`/services?${params.toString()}`, {
           signal: controller.signal,
         })
 
