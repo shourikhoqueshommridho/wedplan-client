@@ -19,6 +19,7 @@ import { Logo } from "@/components/brand/logo"
 import { buttonVariants } from "@/components/ui/button"
 import { serviceCategories } from "@/data/categories"
 import { authClient } from "@/lib/auth-client"
+import { clearJwtToken } from "@/lib/jwt-token-store"
 import { dashboardPathForRole } from "@/lib/safe-redirect"
 import { cn } from "@/lib/utils"
 import { normalizeUserRole, type UserRole } from "@/types/auth"
@@ -97,6 +98,7 @@ export function Navbar() {
         return
       }
 
+      clearJwtToken()
       setIsAccountOpen(false)
       setIsMenuOpen(false)
       toast.success("Signed out", { description: "You have been signed out safely." })

@@ -1,7 +1,7 @@
 "use client"
 
 import { createAuthClient } from "better-auth/react"
-import { inferAdditionalFields } from "better-auth/client/plugins"
+import { inferAdditionalFields, jwtClient } from "better-auth/client/plugins"
 
 /**
  * Same-origin client: requests go to `/api/auth/*`, which the App Router
@@ -10,6 +10,9 @@ import { inferAdditionalFields } from "better-auth/client/plugins"
  */
 export const authClient = createAuthClient({
   plugins: [
+    // Adds typed `authClient.token()` and `authClient.jwks()` helpers.
+    // Sessions remain the primary authentication mechanism.
+    jwtClient(),
     inferAdditionalFields({
       user: {
         role: {

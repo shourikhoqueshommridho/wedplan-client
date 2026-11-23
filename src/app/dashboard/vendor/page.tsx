@@ -1,6 +1,7 @@
 import type { Metadata } from "next"
 import { connection } from "next/server"
 
+import { CurrentPlanCard } from "@/components/vendor/dashboard/current-plan-card"
 import { VendorBanner } from "@/components/vendor/dashboard/vendor-banner"
 import { VendorShell } from "@/components/vendor/dashboard/vendor-shell"
 import { VendorStatCards } from "@/components/vendor/dashboard/vendor-stat-cards"
@@ -11,6 +12,8 @@ import { PremiumUpgradeBanner } from "@/components/vendor/dashboard/premium-upgr
 import { buildVendorStats } from "@/lib/vendor-dashboard"
 import { parseBooking, parseList, parseVendorService } from "@/lib/account-data"
 import { fetchWithSession, requireServerRole } from "@/lib/auth-server"
+import { parseVendorSubscriptionResponse } from "@/lib/subscription-data"
+import { isPremiumPlan } from "@/lib/subscription-ui"
 
 export const metadata: Metadata = {
   title: "Vendor Dashboard",
@@ -24,11 +27,13 @@ export default async function VendorDashboardPage() {
   await connection()
   const session = await requireServerRole("vendor", "/dashboard/vendor")
 
-  const [profileResponse, servicesResponse, bookingsResponse] = await Promise.all([
-    fetchWithSession("/api/vendor/profile"),
-    fetchWithSession("/api/vendor/services"),
-    fetchWithSession("/api/bookings"),
-  ])
+  const [profileResponse, servicesResponse, bookingsResponse, subscriptionResponse] =
+    await Promise.all([
+      fetchWithSession("/api/vendor/profile"),
+      fetchWithSession("/api/vendor/services"),
+      fetchWithSession("/api/bookings"),
+      fetchWithSession("/api/stripe/subscription"),
+    ])
 
   // The profile is managed on the settings page. Its response is still checked
   // here so a failing protected endpoint is surfaced as a dashboard data error.
@@ -40,6 +45,10 @@ export default async function VendorDashboardPage() {
     : []
 
   const dataError = !profileResponse?.ok || !servicesResponse?.ok || !bookingsResponse?.ok
+  const subscription = subscriptionResponse?.ok
+    ? parseVendorSubscriptionResponse(await subscriptionResponse.json().catch(() => null))
+    : null
+  const isPremium = isPremiumPlan(subscription)
   const stats = buildVendorStats(services, bookings)
 
   return (
@@ -67,7 +76,9 @@ export default async function VendorDashboardPage() {
 
         <VendorBanner name={session.user.name} />
 
-        <VendorStatCards stats={stats} />
+        <CurrentPlanCard subscription={subscription} />
+
+        <VendorStatCards stats={stats} isPremium={isPremium} />
 
         <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1.18fr_1fr]">
           <ServicesPreview services={services} dataError={dataError} />
@@ -76,7 +87,7 @@ export default async function VendorDashboardPage() {
 
         <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1.18fr_1fr]">
           <EarningsOverview bookings={bookings} now={new Date().toISOString()} />
-          <PremiumUpgradeBanner />
+          <PremiumUpgradeBanner isPremium={isPremium} />
         </div>
       </div>
     </VendorShell>

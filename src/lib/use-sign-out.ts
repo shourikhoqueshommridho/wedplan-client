@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 
 import { authClient } from "@/lib/auth-client"
+import { clearJwtToken } from "@/lib/jwt-token-store"
 
 /**
  * Shared sign-out behaviour for the dashboard chrome. Uses the same Better Auth
@@ -28,6 +29,7 @@ export function useSignOut() {
         return
       }
 
+      clearJwtToken()
       onSuccess?.()
       toast.success("Signed out", { description: "You have been signed out safely." })
       router.push("/")

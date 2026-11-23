@@ -51,12 +51,19 @@ const cards: readonly StatCard[] = [
 
 interface VendorStatCardsProps {
   stats: VendorStats
+  /** Server-confirmed effective plan; a Premium vendor has no upgrade card. */
+  isPremium?: boolean
 }
 
-export function VendorStatCards({ stats }: VendorStatCardsProps) {
+export function VendorStatCards({ stats, isPremium = false }: VendorStatCardsProps) {
   return (
     <section aria-label="Vendor statistics">
-      <dl className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-5">
+      <dl
+        className={cn(
+          "grid grid-cols-1 gap-3.5 sm:grid-cols-2",
+          isPremium ? "lg:grid-cols-4" : "lg:grid-cols-5",
+        )}
+      >
         {cards.map((card) => {
           const Icon = card.icon
 
@@ -89,28 +96,30 @@ export function VendorStatCards({ stats }: VendorStatCardsProps) {
           )
         })}
 
-        <div className="flex items-center gap-3 rounded-[1.1rem] border border-wine-100 bg-[linear-gradient(110deg,#fdeef4_0%,#fbe0e9_100%)] p-4 shadow-[0_14px_35px_-30px_rgba(112,19,47,0.55)]">
-          <span
-            aria-hidden="true"
-            className="grid size-11 shrink-0 place-items-center rounded-full bg-white/80 text-gold-500 shadow-inner"
-          >
-            <Crown className="size-[1.35rem]" strokeWidth={2.1} />
-          </span>
-          <div className="min-w-0 flex-1">
-            <dt className="text-[0.62rem] font-bold uppercase leading-snug tracking-[0.09em] text-wine-900/65">
-              Current Plan
-            </dt>
-            <dd className="mt-1 font-heading text-xl font-semibold leading-none text-wine-900">
-              Free Plan
-            </dd>
+        {!isPremium ? (
+          <div className="flex items-center gap-3 rounded-[1.1rem] border border-wine-100 bg-[linear-gradient(110deg,#fdeef4_0%,#fbe0e9_100%)] p-4 shadow-[0_14px_35px_-30px_rgba(112,19,47,0.55)]">
+            <span
+              aria-hidden="true"
+              className="grid size-11 shrink-0 place-items-center rounded-full bg-white/80 text-gold-500 shadow-inner"
+            >
+              <Crown className="size-[1.35rem]" strokeWidth={2.1} />
+            </span>
+            <div className="min-w-0 flex-1">
+              <dt className="text-[0.62rem] font-bold uppercase leading-snug tracking-[0.09em] text-wine-900/65">
+                Current Plan
+              </dt>
+              <dd className="mt-1 font-heading text-xl font-semibold leading-none text-wine-900">
+                Free Plan
+              </dd>
+            </div>
+            <Link
+              href="/dashboard/vendor/subscription"
+              className="inline-flex h-8 shrink-0 items-center rounded-full border border-wine-200 bg-white px-3 text-[0.7rem] font-semibold text-wine-800 transition-colors hover:bg-wine-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-wine-200"
+            >
+              Upgrade
+            </Link>
           </div>
-          <Link
-            href="/dashboard/vendor/subscription"
-            className="inline-flex h-8 shrink-0 items-center rounded-full border border-wine-200 bg-white px-3 text-[0.7rem] font-semibold text-wine-800 transition-colors hover:bg-wine-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-wine-200"
-          >
-            Upgrade
-          </Link>
-        </div>
+        ) : null}
       </dl>
     </section>
   )

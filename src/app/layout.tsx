@@ -1,6 +1,7 @@
 import type { Metadata } from "next"
 import { Geist_Mono, Great_Vibes, Manrope, Playfair_Display } from "next/font/google"
 import { Toaster } from "sonner"
+import { JwtTokenProvider } from "@/providers/jwt-token-provider"
 import "./globals.css"
 
 const manrope = Manrope({
@@ -53,7 +54,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className={`${manrope.variable} ${playfair.variable} ${greatVibes.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="flex min-h-full flex-col">
-        {children}
+        <JwtTokenProvider>{children}</JwtTokenProvider>
         <Toaster position="top-center" richColors closeButton />
       </body>
     </html>

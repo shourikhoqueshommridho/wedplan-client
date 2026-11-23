@@ -1,23 +1,47 @@
+import { getJwtToken, refreshJwtToken } from "@/lib/jwt-token-store"
 import { isRecord } from "@/lib/service-listing"
 
 /**
- * Calls the Express API through the same-origin Next.js proxy so session
- * cookies are sent without exposing the API origin or any credentials in the
- * browser bundle.
+ * Calls the Express API through the same-origin Next.js proxy. Session cookies
+ * remain first-party; when a JWKS-verifiable JWT is available it is attached
+ * as a Bearer token as well. A 401 triggers at most one token refresh/retry.
  */
-export async function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
+async function performFetch(
+  path: string,
+  init: RequestInit,
+  allowRetry: boolean,
+): Promise<Response> {
   const normalizedPath = path.startsWith("/") ? path : `/${path}`
+  const headers = new Headers(init.headers)
 
-  return fetch(`/api/backend${normalizedPath}`, {
+  if (!headers.has("accept")) headers.set("accept", "application/json")
+  if (init.body && !headers.has("content-type")) {
+    headers.set("content-type", "application/json")
+  }
+
+  const token = await getJwtToken().catch(() => null)
+  if (token) headers.set("authorization", `Bearer ${token}`)
+
+  const response = await fetch(`/api/backend${normalizedPath}`, {
     ...init,
     credentials: "same-origin",
     cache: "no-store",
-    headers: {
-      accept: "application/json",
-      ...(init.body ? { "content-type": "application/json" } : {}),
-      ...init.headers,
-    },
+    headers,
   })
+
+  if (allowRetry && response.status === 401 && token) {
+    const refreshed = await refreshJwtToken().catch(() => null)
+    // A different token means a real refresh happened; retry exactly once.
+    if (refreshed && refreshed !== token) {
+      return performFetch(path, init, false)
+    }
+  }
+
+  return response
+}
+
+export async function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
+  return performFetch(path, init, true)
 }
 
 export async function readApiMessage(response: Response, fallback: string): Promise<string> {
