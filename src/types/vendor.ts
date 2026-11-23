@@ -42,10 +42,7 @@ export interface VendorService {
   images: string[]
   status: VendorServiceStatus | string
   isActive: boolean
-  /**
-   * Not stored by the current API. Read when present so an admin note can be
-   * surfaced without a schema change; the UI stays honest when it is absent.
-   */
+  
   rejectionReason: string | null
   createdAt: string | null
   updatedAt: string | null
