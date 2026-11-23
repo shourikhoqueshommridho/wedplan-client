@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { AlertCircle, Check, Crown, Info, Loader2, Sparkles } from "lucide-react"
 import { toast } from "sonner"
 
@@ -69,6 +69,8 @@ const PREMIUM_BENEFITS = [
 export function SubscriptionManager({ initialSubscription }: SubscriptionManagerProps) {
   const [subscription, setSubscription] = useState(initialSubscription)
   const [isProcessing, setIsProcessing] = useState(false)
+  // Synchronous guard: React state may not update before a second fast click.
+  const processingRef = useRef(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
 
@@ -94,7 +96,8 @@ export function SubscriptionManager({ initialSubscription }: SubscriptionManager
 
   async function handleUpgrade() {
     // Prevent repeated clicks while a Checkout Session is being created.
-    if (isProcessing) return
+    if (processingRef.current || isProcessing) return
+    processingRef.current = true
 
     setIsProcessing(true)
     setErrorMessage(null)
@@ -131,6 +134,7 @@ export function SubscriptionManager({ initialSubscription }: SubscriptionManager
       setErrorMessage(message)
       toast.error("Could not start checkout", { description: message })
     } finally {
+      processingRef.current = false
       setIsProcessing(false)
     }
   }
