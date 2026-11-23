@@ -31,9 +31,9 @@ const activeLinkClass =
   "text-wine-800 after:absolute after:inset-x-3 after:-bottom-0.5 after:h-0.5 after:rounded-full after:bg-wine-700"
 
 const dashboardLabels: Record<UserRole, string> = {
-  customer: "Customer Dashboard",
-  vendor: "Vendor Dashboard",
-  admin: "Admin Dashboard",
+  customer: "For Customer",
+  vendor: "For Vendor",
+  admin: "For Admin",
 }
 
 export function Navbar() {
