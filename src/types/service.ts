@@ -9,11 +9,7 @@ export const SERVICE_CATEGORY_SLUGS = [
 
 export type ServiceCategorySlug = (typeof SERVICE_CATEGORY_SLUGS)[number]
 
-/**
- * Mirrors the moderation state that the Express API will expose later.
- * The Home Page only renders services where `status` is "approved" and
- * `isActive` is true.
- */
+
 export type ServiceStatus = "pending" | "approved" | "rejected" | "inactive"
 
 export type ServicePriceUnit = "package" | "event" | "person" | "hour"
