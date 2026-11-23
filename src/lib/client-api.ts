@@ -15,7 +15,8 @@ async function performFetch(
   const headers = new Headers(init.headers)
 
   if (!headers.has("accept")) headers.set("accept", "application/json")
-  if (init.body && !headers.has("content-type")) {
+  // FormData must set its own boundary; JSON bodies keep the existing default.
+  if (init.body && !(init.body instanceof FormData) && !headers.has("content-type")) {
     headers.set("content-type", "application/json")
   }
 

@@ -14,6 +14,7 @@ import {
   Search,
   Store,
   Trash2,
+  UploadCloud,
   X,
 } from "lucide-react"
 import { toast } from "sonner"
@@ -27,6 +28,11 @@ import {
 } from "@/lib/client-api"
 import { parseVendorServiceResponse } from "@/lib/account-data"
 import { formatAmount } from "@/lib/format"
+import {
+  ACCEPTED_IMAGE_TYPES,
+  uploadServiceImage,
+  validateImageFile,
+} from "@/lib/image-upload"
 import {
   SERVICE_STATUS_FILTERS,
   filterVendorServices,
@@ -159,6 +165,8 @@ export function VendorServicesClient({
     Partial<Record<keyof ServiceFormValues, string>>
   >({})
   const [isSavingService, setIsSavingService] = useState(false)
+  const [isUploadingImages, setIsUploadingImages] = useState(false)
+  const [imageUploadError, setImageUploadError] = useState<string | null>(null)
   const [busyServiceId, setBusyServiceId] = useState<string | null>(null)
 
   const [deleteTarget, setDeleteTarget] = useState<VendorService | null>(null)
@@ -218,6 +226,7 @@ export function VendorServicesClient({
     setServiceValues(emptyServiceValues())
     setServiceFieldErrors({})
     setServiceError(null)
+    setImageUploadError(null)
     router.push("/dashboard/vendor/services", { scroll: false })
   }
 
@@ -227,6 +236,7 @@ export function VendorServicesClient({
     setServiceValues(serviceValuesFrom(service))
     setServiceFieldErrors({})
     setServiceError(null)
+    setImageUploadError(null)
     router.push(`/dashboard/vendor/services?edit=${service.id}`, { scroll: false })
   }
 
@@ -235,7 +245,54 @@ export function VendorServicesClient({
     setEditingServiceId(null)
     setServiceError(null)
     setServiceFieldErrors({})
+    setImageUploadError(null)
     router.push("/dashboard/vendor/services", { scroll: false })
+  }
+
+  async function handleImageSelection(event: ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.target.files ?? [])
+    event.target.value = ""
+    if (files.length === 0 || isUploadingImages) return
+
+    if (splitImageUrls(serviceValues.images).length + files.length > 8) {
+      toast.error("Too many images", { description: "A service can have at most 8 images." })
+      return
+    }
+
+    for (const file of files) {
+      const problem = validateImageFile(file)
+      if (problem) {
+        setImageUploadError(problem)
+        setServiceFieldErrors((current) => ({ ...current, images: problem }))
+        toast.error("Image not uploaded", { description: problem })
+        return
+      }
+    }
+
+    setIsUploadingImages(true)
+    setImageUploadError(null)
+
+    try {
+      const uploaded: string[] = []
+      for (const file of files) {
+        uploaded.push(await uploadServiceImage(file))
+      }
+
+      setServiceValues((current) => ({
+        ...current,
+        images: [...splitImageUrls(current.images), ...uploaded].join("\n"),
+      }))
+      setServiceFieldErrors((current) => ({ ...current, images: undefined }))
+      toast.success(uploaded.length === 1 ? "Image uploaded" : `${uploaded.length} images uploaded`)
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "The image could not be uploaded. Please try again."
+      setImageUploadError(message)
+      setServiceFieldErrors((current) => ({ ...current, images: message }))
+      toast.error("Upload failed", { description: message })
+    } finally {
+      setIsUploadingImages(false)
+    }
   }
 
   function updateServiceField<K extends keyof ServiceFormValues>(
@@ -249,7 +306,15 @@ export function VendorServicesClient({
 
   async function handleServiceSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (isSavingService || !editorMode) return
+    if (isSavingService || isUploadingImages || !editorMode) return
+
+    if (imageUploadError) {
+      setServiceError("Resolve the image upload error before submitting the service.")
+      toast.error("Service not saved", {
+        description: "Resolve the image upload error before submitting.",
+      })
+      return
+    }
 
     const errors: Partial<Record<keyof ServiceFormValues, string>> = {}
     const images = splitImageUrls(serviceValues.images)
@@ -624,6 +689,36 @@ export function VendorServicesClient({
             </div>
 
             <div>
+              <label htmlFor="vendor-service-image-upload" className={labelClass}>
+                <UploadCloud aria-hidden="true" className="size-3.5 text-wine-500" />
+                Upload images
+              </label>
+              <input
+                id="vendor-service-image-upload"
+                type="file"
+                accept={ACCEPTED_IMAGE_TYPES.join(",")}
+                multiple
+                onChange={handleImageSelection}
+                disabled={isUploadingImages || isSavingService}
+                className="block w-full text-xs text-muted-foreground file:mr-3 file:inline-flex file:h-9 file:items-center file:rounded-full file:border file:border-wine-200 file:bg-white file:px-4 file:text-xs file:font-semibold file:text-wine-800 hover:file:bg-wine-50 disabled:opacity-60"
+              />
+              <p className="mt-1 text-xs text-muted-foreground">
+                JPEG, PNG, WebP or GIF, up to 5 MB each. Uploaded images are added to the list below.
+              </p>
+              {isUploadingImages ? (
+                <p role="status" className="mt-2 inline-flex items-center gap-2 text-xs text-wine-700">
+                  <Loader2 aria-hidden="true" className="size-3.5 animate-spin" />
+                  Uploading images…
+                </p>
+              ) : null}
+              {imageUploadError ? (
+                <p role="alert" className="mt-2 text-xs text-destructive">
+                  {imageUploadError}
+                </p>
+              ) : null}
+            </div>
+
+            <div>
               <label htmlFor="vendor-service-images" className={labelClass}>
                 Image URLs
               </label>
@@ -655,7 +750,11 @@ export function VendorServicesClient({
             </div>
 
             <div className="flex flex-wrap gap-2">
-              <button type="submit" disabled={isSavingService} className={primaryButtonClass}>
+              <button
+                type="submit"
+                disabled={isSavingService || isUploadingImages || Boolean(imageUploadError)}
+                className={primaryButtonClass}
+              >
                 {isSavingService ? (
                   <Loader2 aria-hidden="true" className="size-4 animate-spin" />
                 ) : (
@@ -670,7 +769,7 @@ export function VendorServicesClient({
               <button
                 type="button"
                 onClick={closeServiceEditor}
-                disabled={isSavingService}
+                disabled={isSavingService || isUploadingImages}
                 className={secondaryButtonClass}
               >
                 Cancel
