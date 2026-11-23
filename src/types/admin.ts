@@ -27,6 +27,30 @@ export interface AdminService {
   updatedAt: string | null
 }
 
+export interface AdminUsersMeta {
+  page: number
+  pageSize: number
+  total: number
+  totalPages: number
+}
+
+/** Server-counted statistics from `GET /api/admin/overview`. */
+export interface AdminOverview {
+  totalUsers: number
+  totalCustomers: number
+  totalVendors: number
+  blockedUsers: number
+  totalServices: number
+  pendingServices: number
+  approvedActiveServices: number
+  totalBookings: number
+  pendingBookings: number
+  completedBookings: number
+  totalTransactions: number
+  successfulTransactions: number
+  revenueByCurrency: { currency: string; amount: number }[]
+}
+
 export interface AdminTransaction {
   id: string
   vendorId: string

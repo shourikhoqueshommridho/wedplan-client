@@ -15,17 +15,23 @@ import { toast } from "sonner"
 
 import { RoleBadge } from "@/components/account/role-badge"
 import { ConfirmDialog } from "@/components/vendor/dashboard/confirm-dialog"
+import { parseAdminUser, parseList } from "@/lib/account-data"
+import { parseAdminUsersMeta } from "@/lib/admin-dashboard"
 import { apiFetch, readApiMessage } from "@/lib/client-api"
-import { filterAdminUsers, paginate } from "@/lib/admin-dashboard"
 import { initialsFromName } from "@/lib/customer-dashboard"
+import { isRecord } from "@/lib/service-listing"
 import { USER_ROLES, type UserRole } from "@/types/auth"
-import type { AdminUser } from "@/types/admin"
+import type { AdminUser, AdminUsersMeta } from "@/types/admin"
 
 interface AdminUsersClientProps {
   users: AdminUser[]
   dataError: boolean
   initialSearch: string
   currentUserId: string
+  initialMeta: AdminUsersMeta | null
+  initialRole: UserRole | "all"
+  initialStatus: "all" | "active" | "blocked"
+  initialPage: number
 }
 
 interface PendingBlock {
@@ -153,19 +159,80 @@ export function AdminUsersClient({
   dataError,
   initialSearch,
   currentUserId,
+  initialMeta,
+  initialRole,
+  initialStatus,
+  initialPage,
 }: AdminUsersClientProps) {
   const router = useRouter()
   const [search, setSearch] = useState(initialSearch)
-  const [role, setRole] = useState<UserRole | "all">("all")
-  const [page, setPage] = useState(1)
+  const [role, setRole] = useState<UserRole | "all">(initialRole)
+  const [status, setStatus] = useState<"all" | "active" | "blocked">(initialStatus)
+  const [page, setPage] = useState(initialPage)
+  const [rows, setRows] = useState<AdminUser[]>(users)
+  const [meta, setMeta] = useState<AdminUsersMeta | null>(initialMeta)
+  const [loadError, setLoadError] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [refreshKey, setRefreshKey] = useState(0)
+  const [detailLoading, setDetailLoading] = useState<string | null>(null)
   const [selected, setSelected] = useState<AdminUser | null>(null)
   const [overrides, setOverrides] = useState<Record<string, AdminUser>>({})
   const [pendingBlock, setPendingBlock] = useState<PendingBlock | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
+  const firstRender = useRef(true)
 
-  const items = users.map((user) => overrides[user.id] ?? user)
-  const filtered = filterAdminUsers(items, { search, role })
-  const result = paginate(filtered, page, PAGE_SIZE)
+  // Search, role/status filtering and pagination all run on the server.
+  useEffect(() => {
+    if (firstRender.current) {
+      firstRender.current = false
+      return
+    }
+
+    let cancelled = false
+    const controller = new AbortController()
+    const params = new URLSearchParams({
+      search,
+      role,
+      status,
+      page: String(page),
+      pageSize: String(PAGE_SIZE),
+    })
+
+    setLoading(true)
+    void (async () => {
+      try {
+        const response = await apiFetch(`/account/admin/users?${params.toString()}`, {
+          signal: controller.signal,
+        })
+        if (!response.ok) {
+          if (!cancelled) setLoadError(true)
+          return
+        }
+
+        const payload: unknown = await response.json()
+        if (cancelled) return
+        setRows(parseList(payload, "users", parseAdminUser))
+        setMeta(
+          parseAdminUsersMeta(isRecord(payload) && isRecord(payload.data) ? payload.data.meta : null),
+        )
+        setLoadError(false)
+      } catch {
+        if (!cancelled) setLoadError(true)
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    })()
+
+    return () => {
+      cancelled = true
+      controller.abort()
+    }
+  }, [search, role, status, page, refreshKey])
+
+  const items = rows.map((user) => overrides[user.id] ?? user)
+  const totalPages = meta?.totalPages ?? 1
+  const currentPage = meta?.page ?? page
+  const hasError = dataError || loadError
 
   async function confirmBlock() {
     if (!pendingBlock) return
@@ -192,6 +259,7 @@ export function AdminUsersClient({
       toast.success(blocked ? "User blocked" : "User unblocked", {
         description: `${user.name} is now ${blocked ? "blocked" : "active"}.`,
       })
+      setRefreshKey((current) => current + 1)
       router.refresh()
     } catch {
       toast.error("Status not updated", {
@@ -210,12 +278,31 @@ export function AdminUsersClient({
   function clearFilters() {
     setSearch("")
     setRole("all")
+    setStatus("all")
     setPage(1)
+  }
+
+  async function openDetails(user: AdminUser) {
+    setDetailLoading(user.id)
+    try {
+      const response = await apiFetch(`/admin/users/${user.id}`)
+      if (response.ok) {
+        const payload: unknown = await response.json()
+        const data = isRecord(payload) && isRecord(payload.data) ? payload.data.user : null
+        setSelected(parseAdminUser(data) ?? user)
+        return
+      }
+      setSelected(user)
+    } catch {
+      setSelected(user)
+    } finally {
+      setDetailLoading(null)
+    }
   }
 
   return (
     <div className="space-y-5">
-      {dataError ? (
+      {hasError ? (
         <div
           role="alert"
           className="rounded-2xl border border-destructive/20 bg-destructive/5 px-5 py-4 text-sm text-destructive"
@@ -229,7 +316,7 @@ export function AdminUsersClient({
           <div>
             <h1 className="font-heading text-xl font-semibold text-wine-900">Manage Users</h1>
             <p className="mt-0.5 text-xs text-muted-foreground">
-              {filtered.length} of {items.length} accounts
+              {loading ? "Loading accounts…" : `${meta?.total ?? items.length} accounts`}
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -265,7 +352,21 @@ export function AdminUsersClient({
                 </option>
               ))}
             </select>
-            {search || role !== "all" ? (
+            <label className="sr-only" htmlFor="admin-users-status">Filter by status</label>
+            <select
+              id="admin-users-status"
+              value={status}
+              onChange={(event) => {
+                setStatus(event.target.value as "all" | "active" | "blocked")
+                setPage(1)
+              }}
+              className="h-10 rounded-full border border-wine-100 bg-white px-4 text-sm text-wine-800 outline-none focus:ring-2 focus:ring-wine-200"
+            >
+              <option value="all">All statuses</option>
+              <option value="active">Active</option>
+              <option value="blocked">Blocked</option>
+            </select>
+            {search || role !== "all" || status !== "all" ? (
               <button
                 type="button"
                 onClick={clearFilters}
@@ -277,20 +378,20 @@ export function AdminUsersClient({
           </div>
         </div>
 
-        {result.items.length === 0 ? (
+        {items.length === 0 ? (
           <div className="flex flex-col items-center justify-center px-6 py-14 text-center">
             <span className="grid size-12 place-items-center rounded-2xl bg-wine-50 text-wine-600">
               <UserRound aria-hidden="true" className="size-5" />
             </span>
             <p className="mt-3 font-heading text-lg font-semibold text-wine-900">
-              {dataError ? "Accounts unavailable" : items.length === 0 ? "No accounts yet" : "No matching users"}
+              {loading ? "Loading accounts" : hasError ? "Accounts unavailable" : "No matching users"}
             </p>
             <p className="mt-1 max-w-xs text-xs text-muted-foreground">
-              {dataError
-                ? "Refresh the page or sign in again."
-                : items.length === 0
-                  ? "Registered accounts will appear here."
-                  : "Try a different search or role filter."}
+              {loading
+                ? "Fetching the latest account list."
+                : hasError
+                  ? "Refresh the page or sign in again."
+                  : "Try a different search, role or status filter."}
             </p>
           </div>
         ) : (
@@ -307,7 +408,7 @@ export function AdminUsersClient({
                 </tr>
               </thead>
               <tbody className="divide-y divide-wine-100">
-                {result.items.map((user) => (
+                {items.map((user) => (
                   <tr key={user.id} className="transition-colors hover:bg-wine-50/40">
                     <td className="px-5 py-3">
                       <span className="flex items-center gap-2.5">
@@ -346,11 +447,12 @@ export function AdminUsersClient({
                     <td className="px-5 py-3">
                       <button
                         type="button"
-                        onClick={() => setSelected(user)}
-                        className="inline-flex h-8 items-center gap-1.5 rounded-full border border-wine-200 bg-white px-3 text-xs font-semibold text-wine-800 hover:bg-wine-50"
+                        onClick={() => void openDetails(user)}
+                        disabled={detailLoading === user.id}
+                        className="inline-flex h-8 items-center gap-1.5 rounded-full border border-wine-200 bg-white px-3 text-xs font-semibold text-wine-800 hover:bg-wine-50 disabled:opacity-50"
                       >
                         <UserRound aria-hidden="true" className="size-3" />
-                        View
+                        {detailLoading === user.id ? "Loading" : "View"}
                       </button>
                       {user.id !== currentUserId ? (
                         <button
@@ -379,16 +481,16 @@ export function AdminUsersClient({
           </div>
         )}
 
-        {result.totalPages > 1 ? (
+        {totalPages > 1 ? (
           <div className="flex items-center justify-between gap-3 border-t border-wine-100 px-5 py-3">
             <p className="text-xs text-muted-foreground">
-              Page {result.page} of {result.totalPages}
+              Page {currentPage} of {totalPages}
             </p>
             <div className="flex items-center gap-2">
               <button
                 type="button"
                 onClick={() => setPage((current) => Math.max(1, current - 1))}
-                disabled={result.page === 1}
+                disabled={currentPage <= 1}
                 className="grid size-9 place-items-center rounded-full border border-wine-200 bg-white text-wine-800 hover:bg-wine-50 disabled:opacity-40"
                 aria-label="Previous page"
               >
@@ -396,8 +498,8 @@ export function AdminUsersClient({
               </button>
               <button
                 type="button"
-                onClick={() => setPage((current) => Math.min(result.totalPages, current + 1))}
-                disabled={result.page === result.totalPages}
+                onClick={() => setPage((current) => current + 1)}
+                disabled={currentPage >= totalPages}
                 className="grid size-9 place-items-center rounded-full border border-wine-200 bg-white text-wine-800 hover:bg-wine-50 disabled:opacity-40"
                 aria-label="Next page"
               >

@@ -1,4 +1,5 @@
-import type { AdminService, AdminUser } from "@/types/admin"
+import { isRecord } from "@/lib/service-listing"
+import type { AdminOverview, AdminService, AdminUser, AdminUsersMeta } from "@/types/admin"
 import type { Booking } from "@/types/booking"
 import type { UserRole } from "@/types/auth"
 
@@ -6,26 +7,75 @@ export interface AdminStats {
   totalUsers: number
   totalVendors: number
   totalCustomers: number
+  blockedUsers: number
   totalServices: number
   pendingServices: number
+  approvedActiveServices: number
   totalBookings: number
-  /** Transaction data is not exposed by the current API. */
+  pendingBookings: number
+  completedBookings: number
   totalTransactions: number | null
+  totalRevenue: number | null
+  revenueCurrency: string | null
 }
 
+/** Parser shared by the server loader and the users table. */
+export function parseAdminUsersMeta(value: unknown): AdminUsersMeta | null {
+  if (!isRecord(value)) return null
+  const { page, pageSize, total, totalPages } = value
+  if (
+    typeof page !== "number" ||
+    typeof pageSize !== "number" ||
+    typeof total !== "number" ||
+    typeof totalPages !== "number"
+  ) {
+    return null
+  }
+  return { page, pageSize, total, totalPages }
+}
+
+/** Prefer server counts; fall back to loaded records only if the API failed. */
 export function buildAdminStats(
   users: readonly AdminUser[],
   services: readonly AdminService[],
   bookings: readonly Booking[],
+  overview: AdminOverview | null = null,
 ): AdminStats {
+  if (overview) {
+    const revenue = overview.revenueByCurrency[0]
+    return {
+      totalUsers: overview.totalUsers,
+      totalVendors: overview.totalVendors,
+      totalCustomers: overview.totalCustomers,
+      blockedUsers: overview.blockedUsers,
+      totalServices: overview.totalServices,
+      pendingServices: overview.pendingServices,
+      approvedActiveServices: overview.approvedActiveServices,
+      totalBookings: overview.totalBookings,
+      pendingBookings: overview.pendingBookings,
+      completedBookings: overview.completedBookings,
+      totalTransactions: overview.totalTransactions,
+      totalRevenue: revenue?.amount ?? 0,
+      revenueCurrency: revenue?.currency ?? null,
+    }
+  }
+
   return {
     totalUsers: users.length,
     totalVendors: users.filter((user) => user.role === "vendor").length,
     totalCustomers: users.filter((user) => user.role === "customer").length,
+    blockedUsers: users.filter((user) => user.blocked).length,
     totalServices: services.length,
     pendingServices: services.filter((service) => service.status === "pending").length,
+    approvedActiveServices: services.filter(
+      (service) => service.status === "approved" && service.isActive,
+    ).length,
     totalBookings: bookings.length,
+    pendingBookings: bookings.filter((booking) => booking.status === "pending").length,
+    completedBookings: bookings.filter((booking) => booking.status === "completed").length,
     totalTransactions: null,
+    totalRevenue: null,
+    revenueCurrency: null,
   }
 }
 

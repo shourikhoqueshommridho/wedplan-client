@@ -1,13 +1,20 @@
 import {
+  BadgeCheck,
+  CalendarDays,
+  CheckCircle2,
+  CircleDollarSign,
+  Clock3,
   CreditCard,
   HeartHandshake,
   LayoutGrid,
+  ShieldAlert,
   Store,
   Users,
   WandSparkles,
   type LucideIcon,
 } from "lucide-react"
 
+import { formatTransactionAmount } from "@/lib/admin-transactions"
 import type { AdminStats } from "@/lib/admin-dashboard"
 import { cn } from "@/lib/utils"
 
@@ -62,6 +69,48 @@ const cards: readonly StatCard[] = [
     containerClassName: "border-wine-100 bg-white",
     iconClassName: "bg-wine-100 text-wine-700",
   },
+  {
+    key: "blockedUsers",
+    label: "Blocked Users",
+    icon: ShieldAlert,
+    containerClassName: "border-destructive/20 bg-destructive/5",
+    iconClassName: "bg-destructive/10 text-destructive",
+  },
+  {
+    key: "approvedActiveServices",
+    label: "Approved & Active Services",
+    icon: BadgeCheck,
+    containerClassName: "border-wine-100 bg-white",
+    iconClassName: "bg-wine-100 text-wine-700",
+  },
+  {
+    key: "totalBookings",
+    label: "Total Bookings",
+    icon: CalendarDays,
+    containerClassName: "border-wine-100 bg-white",
+    iconClassName: "bg-wine-100 text-wine-600",
+  },
+  {
+    key: "pendingBookings",
+    label: "Pending Bookings",
+    icon: Clock3,
+    containerClassName: "border-[#f6e3c3] bg-[#fff8ec]",
+    iconClassName: "bg-[#fbe6b8] text-[#c98a16]",
+  },
+  {
+    key: "completedBookings",
+    label: "Completed Bookings",
+    icon: CheckCircle2,
+    containerClassName: "border-wine-100 bg-white",
+    iconClassName: "bg-wine-100 text-wine-700",
+  },
+  {
+    key: "totalRevenue",
+    label: "Paid Revenue",
+    icon: CircleDollarSign,
+    containerClassName: "border-wine-100 bg-[#fdf1f5]",
+    iconClassName: "bg-wine-100 text-wine-700",
+  },
 ]
 
 export function AdminStatCards({ stats }: { stats: AdminStats }) {
@@ -71,6 +120,12 @@ export function AdminStatCards({ stats }: { stats: AdminStats }) {
         {cards.map((card) => {
           const Icon = card.icon
           const value = stats[card.key]
+          const revenueText =
+            card.key === "totalRevenue" &&
+            typeof value === "number" &&
+            stats.revenueCurrency
+              ? formatTransactionAmount(value, stats.revenueCurrency)
+              : null
 
           return (
             <div
@@ -94,11 +149,12 @@ export function AdminStatCards({ stats }: { stats: AdminStats }) {
                   {card.label}
                 </dt>
                 <dd className="mt-1 font-heading text-[1.65rem] font-semibold leading-none text-wine-900">
-                  {value === null ? (
-                    <span title="Transaction data is not available from the current API">—</span>
-                  ) : (
-                    value
-                  )}
+                  {revenueText ??
+                    (value === null ? (
+                      <span title="Data is not available from the current API">—</span>
+                    ) : (
+                      value
+                    ))}
                 </dd>
               </div>
             </div>

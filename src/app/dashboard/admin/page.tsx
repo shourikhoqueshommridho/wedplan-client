@@ -7,7 +7,9 @@ import { AdminStatCards } from "@/components/admin/admin-stat-cards"
 import { buildAdminStats } from "@/lib/admin-dashboard"
 import {
   loadAdminBookings,
+  loadAdminOverview,
   loadAdminServices,
+  loadAdminTransactions,
   loadAdminUsers,
   loadAdminVendors,
 } from "@/lib/admin-server"
@@ -26,17 +28,30 @@ export default async function AdminDashboardPage() {
   await connection()
   await requireServerRole("admin", "/dashboard/admin")
 
-  const [usersResult, vendorsResult, servicesResult, bookingsResult] = await Promise.all([
-    loadAdminUsers(),
-    loadAdminVendors(),
-    loadAdminServices(),
-    loadAdminBookings(),
-  ])
+  const [usersResult, vendorsResult, servicesResult, bookingsResult, overviewResult, transactionsResult] =
+    await Promise.all([
+      loadAdminUsers(),
+      loadAdminVendors(),
+      loadAdminServices(),
+      loadAdminBookings(),
+      loadAdminOverview(),
+      loadAdminTransactions(),
+    ])
 
   const dataError =
-    !usersResult.ok || !vendorsResult.ok || !servicesResult.ok || !bookingsResult.ok
+    !usersResult.ok ||
+    !vendorsResult.ok ||
+    !servicesResult.ok ||
+    !bookingsResult.ok ||
+    !overviewResult.ok ||
+    !transactionsResult.ok
 
-  const stats = buildAdminStats(usersResult.items, servicesResult.items, bookingsResult.items)
+  const stats = buildAdminStats(
+    usersResult.items,
+    servicesResult.items,
+    bookingsResult.items,
+    overviewResult.data,
+  )
 
   return (
     <div className="space-y-5">
@@ -59,6 +74,7 @@ export default async function AdminDashboardPage() {
         users={usersResult.items}
         services={servicesResult.items}
         bookings={bookingsResult.items}
+        transactions={transactionsResult.items}
         now={new Date().toISOString()}
         dataError={dataError}
       />

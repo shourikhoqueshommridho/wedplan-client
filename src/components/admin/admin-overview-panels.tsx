@@ -16,15 +16,20 @@ import { StatusBadge } from "@/components/account/status-badge"
 import { AdminAnalytics } from "@/components/admin/admin-analytics"
 import { useAdminServiceReview } from "@/components/admin/use-admin-service-review"
 import { weddingImages } from "@/data/images"
+import {
+  formatTransactionAmount,
+  formatTransactionDate,
+} from "@/lib/admin-transactions"
 import { initialsFromName } from "@/lib/customer-dashboard"
 import { formatAmount } from "@/lib/format"
-import type { AdminService, AdminUser } from "@/types/admin"
+import type { AdminService, AdminTransaction, AdminUser } from "@/types/admin"
 import type { Booking } from "@/types/booking"
 
 interface AdminOverviewPanelsProps {
   users: AdminUser[]
   services: AdminService[]
   bookings: Booking[]
+  transactions: AdminTransaction[]
   now: string
   dataError: boolean
 }
@@ -47,6 +52,7 @@ export function AdminOverviewPanels({
   users,
   services,
   bookings,
+  transactions,
   now,
   dataError,
 }: AdminOverviewPanelsProps) {
@@ -114,8 +120,14 @@ export function AdminOverviewPanels({
                       </td>
                       <td className="px-4 py-2.5"><RoleBadge role={user.role} /></td>
                       <td className="px-4 py-2.5">
-                        <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[0.6rem] font-bold uppercase tracking-[0.1em] text-emerald-700">
-                          Active
+                        <span
+                          className={
+                            user.blocked
+                              ? "inline-flex items-center rounded-full border border-destructive/20 bg-destructive/5 px-2 py-0.5 text-[0.6rem] font-bold uppercase tracking-[0.1em] text-destructive"
+                              : "inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[0.6rem] font-bold uppercase tracking-[0.1em] text-emerald-700"
+                          }
+                        >
+                          {user.blocked ? "Blocked" : "Active"}
                         </span>
                       </td>
                       <td className="px-4 py-2.5">
@@ -239,7 +251,7 @@ export function AdminOverviewPanels({
       </div>
 
       <div className="grid gap-5 xl:grid-cols-[1.1fr_1.1fr_0.9fr]">
-        {/* Recent transactions — honest empty state until a transaction API exists */}
+        {/* Recent transactions from verified Stripe records */}
         <section aria-labelledby="admin-transactions-title" className={panelClass}>
           <div className={headerClass}>
             <div className="flex items-center gap-2.5">
@@ -256,18 +268,52 @@ export function AdminOverviewPanels({
             </Link>
           </div>
 
-          <div className="flex flex-1 flex-col items-center justify-center px-6 py-10 text-center">
-            <span className="grid size-12 place-items-center rounded-2xl bg-wine-50 text-wine-600">
-              <CreditCard aria-hidden="true" className="size-5" />
-            </span>
-            <p className="mt-3 font-heading text-lg font-semibold text-wine-900">
-              No transactions recorded
-            </p>
-            <p className="mt-1 max-w-xs text-xs leading-relaxed text-muted-foreground">
-              Payment records will appear here once a transaction API is connected. No figures are
-              shown until real records exist.
-            </p>
-          </div>
+          {transactions.length === 0 ? (
+            <div className="flex flex-1 flex-col items-center justify-center px-6 py-10 text-center">
+              <span className="grid size-12 place-items-center rounded-2xl bg-wine-50 text-wine-600">
+                <CreditCard aria-hidden="true" className="size-5" />
+              </span>
+              <p className="mt-3 font-heading text-lg font-semibold text-wine-900">
+                {dataError ? "Transactions unavailable" : "No transactions recorded"}
+              </p>
+              <p className="mt-1 max-w-xs text-xs leading-relaxed text-muted-foreground">
+                {dataError
+                  ? "Refresh the page or sign in again."
+                  : "Verified Stripe payments will appear here automatically."}
+              </p>
+            </div>
+          ) : (
+            <div className="divide-y divide-wine-100">
+              {transactions.slice(0, 4).map((transaction) => (
+                <div
+                  key={transaction.id}
+                  className="flex items-center justify-between gap-3 px-5 py-3"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-wine-900">
+                      {transaction.vendorName}
+                    </p>
+                    <p className="text-[0.65rem] text-muted-foreground">
+                      {formatTransactionDate(transaction.createdAt)}
+                      <span className="mx-1.5">·</span>
+                      <span
+                        className={
+                          transaction.status === "paid"
+                            ? "text-emerald-700"
+                            : "text-wine-700"
+                        }
+                      >
+                        {transaction.status}
+                      </span>
+                    </p>
+                  </div>
+                  <p className="shrink-0 text-sm font-semibold text-wine-800">
+                    {formatTransactionAmount(transaction.amount, transaction.currency)}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
         </section>
 
         <AdminAnalytics bookings={bookings} now={now} totalBookings={bookings.length} />
