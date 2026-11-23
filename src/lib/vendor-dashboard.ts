@@ -15,10 +15,7 @@ export interface MonthlyEarning {
   count: number
 }
 
-/**
- * Groups accepted/completed booking revenue by UTC month. Only months within
- * the requested window are shown, so the chart reflects real booking records.
- */
+
 export function buildMonthlyEarnings(
   bookings: readonly Booking[],
   months = 6,
