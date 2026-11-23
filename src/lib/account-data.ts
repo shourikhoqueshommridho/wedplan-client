@@ -163,6 +163,8 @@ export function parseAdminUser(value: unknown): AdminUser | null {
     image: text(value.image),
     role: normalizeUserRole(value.role),
     createdAt: text(value.createdAt),
+    blocked: value.blocked === true,
+    blockedAt: text(value.blockedAt),
   }
 }
 

@@ -1,9 +1,21 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import { ChevronLeft, ChevronRight, Search, UserRound, X } from "lucide-react"
+import { useRouter } from "next/navigation"
+import {
+  ChevronLeft,
+  ChevronRight,
+  Search,
+  ShieldCheck,
+  ShieldOff,
+  UserRound,
+  X,
+} from "lucide-react"
+import { toast } from "sonner"
 
 import { RoleBadge } from "@/components/account/role-badge"
+import { ConfirmDialog } from "@/components/vendor/dashboard/confirm-dialog"
+import { apiFetch, readApiMessage } from "@/lib/client-api"
 import { filterAdminUsers, paginate } from "@/lib/admin-dashboard"
 import { initialsFromName } from "@/lib/customer-dashboard"
 import { USER_ROLES, type UserRole } from "@/types/auth"
@@ -13,6 +25,12 @@ interface AdminUsersClientProps {
   users: AdminUser[]
   dataError: boolean
   initialSearch: string
+  currentUserId: string
+}
+
+interface PendingBlock {
+  user: AdminUser
+  blocked: boolean
 }
 
 const PAGE_SIZE = 8
@@ -99,7 +117,15 @@ function UserDetailsDialog({ user, onClose }: { user: AdminUser | null; onClose:
           </div>
           <div className="flex items-center justify-between gap-4 px-4 py-3">
             <dt className="text-xs font-semibold text-muted-foreground">Account status</dt>
-            <dd className="text-xs font-semibold text-emerald-700">Active</dd>
+            <dd
+              className={
+                user.blocked
+                  ? "text-xs font-semibold text-destructive"
+                  : "text-xs font-semibold text-emerald-700"
+              }
+            >
+              {user.blocked ? "Blocked" : "Active"}
+            </dd>
           </div>
           <div className="flex items-center justify-between gap-4 px-4 py-3">
             <dt className="text-xs font-semibold text-muted-foreground">Joined</dt>
@@ -122,14 +148,59 @@ function UserDetailsDialog({ user, onClose }: { user: AdminUser | null; onClose:
   )
 }
 
-export function AdminUsersClient({ users, dataError, initialSearch }: AdminUsersClientProps) {
+export function AdminUsersClient({
+  users,
+  dataError,
+  initialSearch,
+  currentUserId,
+}: AdminUsersClientProps) {
+  const router = useRouter()
   const [search, setSearch] = useState(initialSearch)
   const [role, setRole] = useState<UserRole | "all">("all")
   const [page, setPage] = useState(1)
   const [selected, setSelected] = useState<AdminUser | null>(null)
+  const [overrides, setOverrides] = useState<Record<string, AdminUser>>({})
+  const [pendingBlock, setPendingBlock] = useState<PendingBlock | null>(null)
+  const [busyId, setBusyId] = useState<string | null>(null)
 
-  const filtered = filterAdminUsers(users, { search, role })
+  const items = users.map((user) => overrides[user.id] ?? user)
+  const filtered = filterAdminUsers(items, { search, role })
   const result = paginate(filtered, page, PAGE_SIZE)
+
+  async function confirmBlock() {
+    if (!pendingBlock) return
+    const { user, blocked } = pendingBlock
+    setPendingBlock(null)
+    setBusyId(user.id)
+
+    try {
+      const response = await apiFetch(
+        `/admin/users/${user.id}/${blocked ? "block" : "unblock"}`,
+        { method: "PATCH" },
+      )
+
+      if (!response.ok) {
+        const message = await readApiMessage(response, "The account status could not be updated.")
+        toast.error("Status not updated", { description: message })
+        return
+      }
+
+      setOverrides((current) => ({
+        ...current,
+        [user.id]: { ...user, blocked },
+      }))
+      toast.success(blocked ? "User blocked" : "User unblocked", {
+        description: `${user.name} is now ${blocked ? "blocked" : "active"}.`,
+      })
+      router.refresh()
+    } catch {
+      toast.error("Status not updated", {
+        description: "Please check your connection and try again.",
+      })
+    } finally {
+      setBusyId(null)
+    }
+  }
 
   function updateSearch(value: string) {
     setSearch(value)
@@ -158,7 +229,7 @@ export function AdminUsersClient({ users, dataError, initialSearch }: AdminUsers
           <div>
             <h1 className="font-heading text-xl font-semibold text-wine-900">Manage Users</h1>
             <p className="mt-0.5 text-xs text-muted-foreground">
-              {filtered.length} of {users.length} accounts
+              {filtered.length} of {items.length} accounts
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -212,12 +283,12 @@ export function AdminUsersClient({ users, dataError, initialSearch }: AdminUsers
               <UserRound aria-hidden="true" className="size-5" />
             </span>
             <p className="mt-3 font-heading text-lg font-semibold text-wine-900">
-              {dataError ? "Accounts unavailable" : users.length === 0 ? "No accounts yet" : "No matching users"}
+              {dataError ? "Accounts unavailable" : items.length === 0 ? "No accounts yet" : "No matching users"}
             </p>
             <p className="mt-1 max-w-xs text-xs text-muted-foreground">
               {dataError
                 ? "Refresh the page or sign in again."
-                : users.length === 0
+                : items.length === 0
                   ? "Registered accounts will appear here."
                   : "Try a different search or role filter."}
             </p>
@@ -259,8 +330,14 @@ export function AdminUsersClient({ users, dataError, initialSearch }: AdminUsers
                     </td>
                     <td className="px-5 py-3"><RoleBadge role={user.role} /></td>
                     <td className="px-5 py-3">
-                      <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-[0.6rem] font-bold uppercase tracking-[0.1em] text-emerald-700">
-                        Active
+                      <span
+                        className={
+                          user.blocked
+                            ? "inline-flex items-center rounded-full border border-destructive/20 bg-destructive/5 px-2.5 py-0.5 text-[0.6rem] font-bold uppercase tracking-[0.1em] text-destructive"
+                            : "inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-[0.6rem] font-bold uppercase tracking-[0.1em] text-emerald-700"
+                        }
+                      >
+                        {user.blocked ? "Blocked" : "Active"}
                       </span>
                     </td>
                     <td className="px-5 py-3 text-xs text-muted-foreground">
@@ -275,6 +352,25 @@ export function AdminUsersClient({ users, dataError, initialSearch }: AdminUsers
                         <UserRound aria-hidden="true" className="size-3" />
                         View
                       </button>
+                      {user.id !== currentUserId ? (
+                        <button
+                          type="button"
+                          onClick={() => setPendingBlock({ user, blocked: !user.blocked })}
+                          disabled={busyId === user.id}
+                          className={`inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-xs font-semibold disabled:opacity-50 ${
+                            user.blocked
+                              ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                              : "border-destructive/20 bg-destructive/5 text-destructive hover:bg-destructive/10"
+                          }`}
+                        >
+                          {user.blocked ? (
+                            <ShieldCheck aria-hidden="true" className="size-3" />
+                          ) : (
+                            <ShieldOff aria-hidden="true" className="size-3" />
+                          )}
+                          {user.blocked ? "Unblock" : "Block"}
+                        </button>
+                      ) : null}
                     </td>
                   </tr>
                 ))}
@@ -313,6 +409,23 @@ export function AdminUsersClient({ users, dataError, initialSearch }: AdminUsers
       </section>
 
       <UserDetailsDialog user={selected} onClose={() => setSelected(null)} />
+
+      <ConfirmDialog
+        open={pendingBlock !== null}
+        title={pendingBlock?.blocked ? "Block this user?" : "Unblock this user?"}
+        description={
+          pendingBlock
+            ? pendingBlock.blocked
+              ? `"${pendingBlock.user.name}" will lose access to protected WedPlan features until unblocked.`
+              : `"${pendingBlock.user.name}" will regain access to protected WedPlan features.`
+            : ""
+        }
+        confirmLabel={pendingBlock?.blocked ? "Block" : "Unblock"}
+        tone={pendingBlock?.blocked ? "destructive" : "default"}
+        busy={busyId !== null}
+        onConfirm={() => void confirmBlock()}
+        onCancel={() => setPendingBlock(null)}
+      />
     </div>
   )
 }

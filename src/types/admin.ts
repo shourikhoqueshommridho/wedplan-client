@@ -7,6 +7,8 @@ export interface AdminUser {
   image: string | null
   role: UserRole
   createdAt: string | null
+  blocked: boolean
+  blockedAt: string | null
 }
 
 export interface AdminService {
@@ -23,4 +25,17 @@ export interface AdminService {
   isActive: boolean
   createdAt: string | null
   updatedAt: string | null
+}
+
+export interface AdminTransaction {
+  id: string
+  vendorId: string
+  vendorName: string
+  plan: "free" | "premium"
+  amount: number
+  currency: string
+  status: string
+  stripeSessionId: string | null
+  stripeSubscriptionId: string | null
+  createdAt: string | null
 }

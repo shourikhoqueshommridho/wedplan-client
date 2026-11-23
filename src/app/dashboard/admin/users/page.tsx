@@ -16,7 +16,7 @@ interface PageProps {
 }
 
 export default async function AdminUsersPage({ searchParams }: PageProps) {
-  await requireServerRole("admin", "/dashboard/admin/users")
+  const session = await requireServerRole("admin", "/dashboard/admin/users")
 
   const { search } = await searchParams
   const result = await loadAdminUsers()
@@ -26,6 +26,7 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
       users={result.items}
       dataError={!result.ok}
       initialSearch={search ?? ""}
+      currentUserId={session.user.id}
     />
   )
 }

@@ -1,11 +1,14 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import { Check, Loader2, MoreHorizontal, Search, X } from "lucide-react"
+import { useRouter } from "next/navigation"
+import { Check, Loader2, MoreHorizontal, Search, Trash2, X } from "lucide-react"
+import { toast } from "sonner"
 
 import { StatusBadge } from "@/components/account/status-badge"
 import { ConfirmDialog } from "@/components/vendor/dashboard/confirm-dialog"
 import { useAdminServiceReview } from "@/components/admin/use-admin-service-review"
+import { apiFetch, readApiMessage } from "@/lib/client-api"
 import {
   adminServiceCategories,
   filterAdminServices,
@@ -136,8 +139,12 @@ export function AdminServicesClient({
   initialStatus,
   initialSearch,
 }: AdminServicesClientProps) {
+  const router = useRouter()
   const { busyId, review } = useAdminServiceReview()
   const [overrides, setOverrides] = useState<Record<string, AdminService>>({})
+  const [deletedIds, setDeletedIds] = useState<Set<string>>(new Set())
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
   const [search, setSearch] = useState(initialSearch)
   const [category, setCategory] = useState("all")
   const [status, setStatus] = useState<AdminServiceFilterStatus>(initialStatus)
@@ -145,7 +152,9 @@ export function AdminServicesClient({
   const [selectedId, setSelectedId] = useState<string | null>(initialServiceId)
   const [pendingReview, setPendingReview] = useState<PendingReview | null>(null)
 
-  const items = services.map((service) => overrides[service.id] ?? service)
+  const items = services
+    .filter((service) => !deletedIds.has(service.id))
+    .map((service) => overrides[service.id] ?? service)
   const categories = adminServiceCategories(items)
   const filtered = filterAdminServices(items, { search, category, status })
   const result = paginate(filtered, page, PAGE_SIZE)
@@ -162,6 +171,33 @@ export function AdminServicesClient({
         ...current,
         [service.id]: { ...service, status: nextStatus, isActive: nextStatus === "approved" },
       }))
+    }
+  }
+
+  async function confirmDelete() {
+    if (!pendingDeleteId) return
+    const service = items.find((item) => item.id === pendingDeleteId)
+    setPendingDeleteId(null)
+    if (!service) return
+
+    setDeletingId(service.id)
+    try {
+      const response = await apiFetch(`/admin/services/${service.id}`, { method: "DELETE" })
+      if (!response.ok) {
+        const message = await readApiMessage(response, "The service could not be deleted.")
+        toast.error("Delete failed", { description: message })
+        return
+      }
+
+      setDeletedIds((current) => new Set(current).add(service.id))
+      toast.success("Service deleted", { description: `${service.name} was removed.` })
+      router.refresh()
+    } catch {
+      toast.error("Delete failed", {
+        description: "Please check your connection and try again.",
+      })
+    } finally {
+      setDeletingId(null)
     }
   }
 
@@ -344,6 +380,19 @@ export function AdminServicesClient({
                             <MoreHorizontal aria-hidden="true" className="size-4" />
                           )}
                         </button>
+                        <button
+                          type="button"
+                          onClick={() => setPendingDeleteId(service.id)}
+                          disabled={deletingId === service.id}
+                          aria-label={`Delete ${service.name}`}
+                          className="grid size-8 place-items-center rounded-full border border-destructive/20 bg-destructive/5 text-destructive hover:bg-destructive/10 disabled:opacity-50"
+                        >
+                          {deletingId === service.id ? (
+                            <Loader2 aria-hidden="true" className="size-3.5 animate-spin" />
+                          ) : (
+                            <Trash2 aria-hidden="true" className="size-4" />
+                          )}
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -397,6 +446,21 @@ export function AdminServicesClient({
         busy={busyId !== null}
         onConfirm={() => void confirmReview()}
         onCancel={() => setPendingReview(null)}
+      />
+
+      <ConfirmDialog
+        open={pendingDeleteId !== null}
+        title="Delete this service?"
+        description={
+          pendingDeleteId
+            ? `"${items.find((item) => item.id === pendingDeleteId)?.name ?? "This service"}" will be permanently removed from WedPlan.`
+            : ""
+        }
+        confirmLabel="Delete"
+        tone="destructive"
+        busy={deletingId !== null}
+        onConfirm={() => void confirmDelete()}
+        onCancel={() => setPendingDeleteId(null)}
       />
     </div>
   )
