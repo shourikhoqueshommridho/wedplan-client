@@ -11,6 +11,13 @@ const nextConfig: NextConfig = {
         hostname: "images.unsplash.com",
         pathname: "/**",
       },
+      {
+        // ImgBB's upload response returns `url` / `display_url` on this CDN host.
+        protocol: "https",
+        hostname: "i.ibb.co",
+        port: "",
+        pathname: "/**",
+      },
     ],
   },
   turbopack: {
